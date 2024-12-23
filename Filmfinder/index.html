@@ -95,13 +95,13 @@
                     if (year) url += `&primary_release_year=${year}`;
                 }
 
-                const response = await fetch(url); // This sends an HTTP request to the URL (which is an API endpoint) and waits for the response.
+                const response = await fetch(url); 
                 const data = await response.json();
 
-                //checks if the results array exists and has any films in it. In other words, it's verifying that the API returned some movies.
+                
                 if (data.results && data.results.length > 0) {
 
-                    //If the API returned results, this stores those results in the films variable.
+                    
                     const films = data.results.slice(0, 10);
 
                     resultsContainer.innerHTML = await Promise.all(films.map(async film => {
@@ -143,7 +143,7 @@
             try {
                 const response = await fetch(`https://api.themoviedb.org/3/movie/${movieId}/credits?api_key=${apiKey}`);
                 const data = await response.json();
-                return data.cast.slice(0, 5).map(actor => actor.name).join(', ') || 'Not Available'; //tim 5 actoractor
+                return data.cast.slice(0, 5).map(actor => actor.name).join(', ') || 'Not Available';
             } catch (error) {
                 console.error('Error fetching cast:', error);
                 return 'Not Available';
@@ -152,9 +152,9 @@
 
         async function fetchTrailer(movieId, apiKey) {
             try {
-                const response = await fetch(`https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=${apiKey}`); //call TMDB API su dung movie ID
+                const response = await fetch(`https://api.themoviedb.org/3/movie/${movieId}/videos?api_key=${apiKey}`);
                 const data = await response.json();
-                const trailer = data.results.find(video => video.type === 'Trailer' && video.site === 'YouTube'); // tim trailer cho ten phim vua kiem dcdc
+                const trailer = data.results.find(video => video.type === 'Trailer' && video.site === 'YouTube');
                 return trailer ? trailer.key : null;
             } catch (error) {
                 console.error('Error fetching trailer:', error);
@@ -163,7 +163,7 @@
         }
 
 
-        function mapGenreToId(genre) {  // convert tu string(genre) sang ID để gửi lên API
+        function mapGenreToId(genre) { 
             const genreMap = {
                 "Action": 28,
                 "Comedy": 35,
@@ -182,7 +182,7 @@
             return genreMap[genre] || '';
         }
 
-        function mapIdToGenre(id) { // ID > genregenre
+        function mapIdToGenre(id) { 
             const idMap = {
                 28: "Action",
                 35: "Comedy",
@@ -202,15 +202,15 @@
         }
 
         function addToFavorites(id, title) {
-            if (!favorites.find(film => film.id === id)) { // check neu phim da o trong fav film hay chua
+            if (!favorites.find(film => film.id === id)) { 
                 favorites.push({ id, title }); // add vao fav filmfilm
                 localStorage.setItem('favorites', JSON.stringify(favorites));
-                displayFavorites();  // hien thi fav moviemovie
+                displayFavorites();  
             }
         }
 
-        function displayFavorites() {  // display fav film
-            const favoritesContent = document.getElementById('favoritesContent'); // read fav film list tu localStorelocalStore
+        function displayFavorites() {  
+            const favoritesContent = document.getElementById('favoritesContent');
             if (favorites.length > 0) {
                 favoritesContent.innerHTML = favorites.map(film => `
                 <p>
@@ -254,22 +254,19 @@
             displayFavorites();
         }
 
-        // Close favorites list when clicking outside
         window.onclick = function (event) {
             const favoritesList = document.getElementById('favoritesList');
             if (!event.target.closest('.favorites-container')) {
                 favoritesList.style.display = 'none';
             }
         };
-
-        // Prevent dropdown from closing on clicks inside it
+        
         const favoritesList = document.getElementById('favoritesList');
         favoritesList.onclick = function (event) {
             event.stopPropagation();
         };
 
-
-        displayFavorites(); // Initialize favorites display on page load.
+        displayFavorites(); 
     </script>
 </body>
 
