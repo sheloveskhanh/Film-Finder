@@ -1,373 +1,485 @@
-function createForm() {
-  const formContainer = document.getElementById("formContainer");
+// Cached data
+let cachedGenres = null;
+let cachedLanguages = null;
+let favoriteFilms = [];
 
-  if (!formContainer) {
-    console.error("Form container not found.");
-    return;
-  }
+// Helper function: Construct API URL
+function constructApiUrl(endpoint, params = {}) {
+    const apiKey = "36b0465246018e127b54bfa7d47d965c";
+    const baseUrl = "https://api.themoviedb.org/3";
+    const url = new URL(`${baseUrl}/${endpoint}`);
 
-  // Create form element
-  const form = document.createElement("form");
-  form.id = "searchForm";
-  formContainer.appendChild(form); // Append the form to the formContainer
+    // Add the API key and other query parameters
+    url.searchParams.append("api_key", apiKey);
+    Object.entries(params).forEach(([key, value]) => {
+        if (value) url.searchParams.append(key, value);
+    });
 
-  // Create search-container div
-  const searchContainer = document.createElement("div");
-  searchContainer.className = "search-container";
-  form.appendChild(searchContainer); // Append searchContainer to the form
+    return url.toString();
+}
 
-  // Search input
-  const searchInput = document.createElement("input");
-  searchInput.type = "text";
-  searchInput.id = "search";
-  searchInput.placeholder = "Enter film title or keyword...";
-  searchContainer.appendChild(searchInput);
+// Generalized API fetch function
+async function handleApiRequest(url, options = {}) {
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            throw new Error(`Network error: ${response.status} - ${response.statusText}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("API Request Error:", error);
 
-  // Genre dropdown
-  const genreSelect = document.createElement("select");
-  genreSelect.id = "genre";
-  genreSelect.innerHTML = `
-        <option value="">Select Genre</option>
-        <option value="Action">Action</option>
-        <option value="Comedy">Comedy</option>
-        <option value="Drama">Drama</option>
-        <option value="Horror">Horror</option>
-        <option value="Science Fiction">Science Fiction</option>
-        <option value="Romance">Romance</option>
-        <option value="Thriller">Thriller</option>
-        <option value="Animation">Animation</option>`;
-  searchContainer.appendChild(genreSelect);
+        // Explicitly show the network error
+        displayNetworkError("Failed to fetch data. Please check your connection and try again.");
+        
+        // Re-throw the error if needed for further handling
+        throw error;
+    }
+}
 
-  // Language dropdown
-  const languageSelect = document.createElement("select");
-  languageSelect.id = "language";
-  languageSelect.innerHTML = `
-        <option value="">Select Language</option>
-        <option value="en">English</option>
-        <option value="es">Spanish</option>
-        <option value="fr">French</option>
-        <option value="de">German</option>
-        <option value="it">Italian</option>`;
-  searchContainer.appendChild(languageSelect);
 
-  // Year input
-  const yearInput = document.createElement("input");
-  yearInput.type = "number";
-  yearInput.id = "year";
-  yearInput.placeholder = "Enter Year";
-  yearInput.min = "1900";
-  yearInput.max = "2024";
-  searchContainer.appendChild(yearInput);
+async function fetchFromAPI(endpoint, params = {}) {
+    const url = constructApiUrl(endpoint, params);
+    return await handleApiRequest(url);
+}
 
-  // Sort dropdown
-  const sortSelect = document.createElement("select");
-  sortSelect.id = "sort";
-  sortSelect.innerHTML = `
+// Function to display network error
+function displayNetworkError(message) {
+    const errorContainer = document.getElementById("errorContainer");
+
+    if (!errorContainer) {
+        const errorDiv = document.createElement("div");
+        errorDiv.id = "errorContainer";
+        errorDiv.textContent = message;
+        document.body.appendChild(errorDiv);
+
+        setTimeout(() => {
+            errorDiv.remove();
+        }, 5000);
+    }
+}
+
+// Function to save form data to localStorage
+function saveFormData() {
+    const formData = {
+        search: document.getElementById("search").value,
+        genre: document.getElementById("genre").value,
+        language: document.getElementById("language").value,
+        year: document.getElementById("year").value,
+        sort: document.getElementById("sort").value,
+    };
+    localStorage.setItem("formData", JSON.stringify(formData));
+}
+
+// Function to create the form
+async function createForm() {
+    const formContainer = document.getElementById("formContainer");
+    if (!formContainer) {
+        console.error("Form container not found.");
+        return;
+    }
+
+    const form = document.createElement("form");
+    form.id = "searchForm";
+    formContainer.appendChild(form);
+
+    const searchContainer = document.createElement("div");
+    searchContainer.className = "search-container";
+    form.appendChild(searchContainer);
+
+    // Load saved data from localStorage
+    const savedData = JSON.parse(localStorage.getItem("formData")) || {};
+
+    // Search input
+    const searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.id = "search";
+    searchInput.name = "search";
+    searchInput.placeholder = "Enter film title or keyword...";
+    searchInput.value = savedData.search || ""; // Load saved value
+    searchInput.oninput = () => {
+        searchInput.value = searchInput.value.replace(/[^a-zA-Z0-9\s]/g, ""); // Remove invalid characters
+        saveFormData();
+    };
+    searchContainer.appendChild(searchInput);
+
+    // Genre dropdown
+    const genreSelect = document.createElement("select");
+    genreSelect.id = "genre";
+    genreSelect.name = "genre";
+    genreSelect.innerHTML = `<option value="">Loading genres...</option>`;
+    searchContainer.appendChild(genreSelect);
+    await populateGenres(genreSelect);
+    genreSelect.value = savedData.genre || ""; // Load saved value
+    genreSelect.onchange = saveFormData;
+
+    // Language dropdown
+    const languageSelect = document.createElement("select");
+    languageSelect.id = "language";
+    languageSelect.name = "language";
+    languageSelect.innerHTML = `<option value="">Loading languages...</option>`;
+    searchContainer.appendChild(languageSelect);
+    await populateLanguages(languageSelect);
+    languageSelect.value = savedData.language || ""; // Load saved value
+    languageSelect.onchange = saveFormData;
+
+    // Year input
+    const yearInput = document.createElement("input");
+    yearInput.type = "number";
+    yearInput.id = "year";
+    yearInput.name = "year";
+    yearInput.placeholder = "Enter Year";
+    yearInput.min = "1900";
+    yearInput.max = new Date().getFullYear().toString();
+    yearInput.value = savedData.year || ""; // Load saved value
+    yearInput.oninput = saveFormData;
+    searchContainer.appendChild(yearInput);
+
+    // Sort dropdown
+    const sortSelect = document.createElement("select");
+    sortSelect.id = "sort";
+    sortSelect.name = "sort";
+    sortSelect.innerHTML = `
         <option value="">Sort By</option>
         <option value="popularity.desc">Popularity</option>
         <option value="release_date.desc">Release Date</option>
         <option value="vote_average.desc">Rating</option>`;
-  searchContainer.appendChild(sortSelect);
+    sortSelect.value = savedData.sort || ""; // Load saved value
+    sortSelect.onchange = saveFormData;
+    searchContainer.appendChild(sortSelect);
 
-  // Search button
-  const searchButton = document.createElement("button");
-  searchButton.textContent = "Search";
-  searchButton.type = "button";
-  searchButton.onclick = () => searchFilm();
-  searchContainer.appendChild(searchButton);
+    // Search button
+    const searchButton = document.createElement("button");
+    searchButton.textContent = "Search";
+    searchButton.type = "submit";
+    searchContainer.appendChild(searchButton);
 
-  // Reset button
-  const resetButton = document.createElement("button");
-  resetButton.textContent = "Reset";
-  resetButton.type = "button";
-  resetButton.onclick = resetForm;
-  searchContainer.appendChild(resetButton);
+    // Reset button
+    const resetButton = document.createElement("button");
+    resetButton.textContent = "Reset";
+    resetButton.type = "reset";
+    resetButton.onclick = () => {
+        localStorage.removeItem("formData"); // Clear saved data
+        resetForm();
+    };
+    searchContainer.appendChild(resetButton);
 
-  // Create pagination container
-  const paginationContainer = document.createElement("div");
-  paginationContainer.id = "pagination";
-  paginationContainer.className = "pagination-container";
+    form.onsubmit = async (event) => {
+        event.preventDefault();
+        searchFilm();
+    };
+}
 
-  // Append paginationContainer outside the form but above the footer
-  document.querySelector("main").appendChild(paginationContainer);
+// Function to populate genres
+async function populateGenres(genreSelect) {
+    const genres = await getGenres();
+    genreSelect.innerHTML = `<option value="">Select Genre</option>`;
+    genres.forEach((genre) => {
+        const option = document.createElement("option");
+        option.value = genre.id;
+        option.textContent = genre.name;
+        genreSelect.appendChild(option);
+    });
+}
+
+// Function to populate languages
+async function populateLanguages(languageSelect) {
+    const languages = await getLanguages();
+    languageSelect.innerHTML = `<option value="">Select Language</option>`;
+    languages.forEach((lang) => {
+        const option = document.createElement("option");
+        option.value = lang.iso_639_1;
+        option.textContent = lang.english_name;
+        languageSelect.appendChild(option);
+    });
+}
+
+// Function to fetch genres
+async function getGenres() {
+    if (cachedGenres) return cachedGenres;
+    const data = await fetchFromAPI("genre/movie/list", { language: "en-US" });
+    cachedGenres = data.genres;
+    return cachedGenres;
+}
+
+// Function to fetch languages
+async function getLanguages() {
+    if (cachedLanguages) return cachedLanguages;
+    const data = await fetchFromAPI("configuration/languages");
+    cachedLanguages = data;
+    return cachedLanguages;
 }
 
 // Function to reset the form
 function resetForm() {
-  document.getElementById("search").value = "";
-  document.getElementById("genre").value = "";
-  document.getElementById("language").value = "";
-  document.getElementById("year").value = "";
-  document.getElementById("sort").value = "";
-  document.getElementById("results").innerHTML = "";
-  document.getElementById("pagination").innerHTML = "";
+    document.getElementById("searchForm").reset();
+    document.getElementById("results").innerHTML = "";
+    document.getElementById("pagination").innerHTML = "";
 }
 
-// Function to fetch films based on user input
+// Function to search films
 async function searchFilm(page = 1) {
-  page = Math.max(1, Math.min(500, page));
+    page = Math.max(1, Math.min(500, page));
+    const query = document.getElementById("search").value.trim();
+    const genre = document.getElementById("genre").value;
+    const language = document.getElementById("language").value;
+    const year = document.getElementById("year").value;
+    const sort = document.getElementById("sort").value;
 
-  const query = document.getElementById("search").value.trim();
-  const genre = document.getElementById("genre").value;
-  const language = document.getElementById("language").value;
-  const year = document.getElementById("year").value;
-  const sort = document.getElementById("sort").value;
-  const resultsContainer = document.getElementById("results");
+    const resultsContainer = document.getElementById("results");
+    resultsContainer.innerHTML = "<p>Loading films...</p>";
 
-  resultsContainer.innerHTML = "<p>Loading films...</p>";
+    const params = {
+        query: query || undefined,
+        page,
+        with_genres: genre || undefined,
+        language: language || undefined,
+        primary_release_year: year || undefined,
+        sort_by: sort || undefined,
+    };
 
-  try {
-    const apiKey = "36b0465246018e127b54bfa7d47d965c";
-    let url = `https://api.themoviedb.org/3/discover/movie?api_key=${apiKey}&page=${page}`;
+    const endpoint = query ? "search/movie" : "discover/movie";
 
-    if (query) {
-      url = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(
-        query
-      )}&page=${page}`;
-    } else {
-      if (genre) url += `&with_genres=${mapGenreToId(genre)}`;
-      if (language) url += `&language=${language}`;
-      if (year) url += `&primary_release_year=${year}`;
-      if (sort) url += `&sort_by=${sort}`;
+    try {
+        const data = await fetchFromAPI(endpoint, params);
+
+        if (data.results && data.results.length > 0) {
+            renderFilms(data.results);
+            renderPagination(page, data.total_pages);
+        } else {
+            resultsContainer.innerHTML =
+                "<p>No films match your search. Try adjusting the filters or check your input.</p>";
+            document.getElementById("pagination").innerHTML = "";
+        }
+    } catch (error) {
+        console.error("Fetch error:", error);
+        resultsContainer.innerHTML = `<p>Unable to fetch films. Please try again later. Error: ${error.message}</p>`;
     }
-
-    console.log("Constructed API URL:", url);
-
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("Error Response:", errorData);
-      throw new Error(errorData.status_message || "Unknown error occurred.");
-    }
-
-    const data = await response.json();
-
-    if (data.results && data.results.length > 0) {
-      renderFilms(data.results);
-      renderPagination(page, data.total_pages); // Render pagination buttons
-    } else {
-      resultsContainer.innerHTML =
-        "<p>No films match your search. Try adjusting the filters or check your input.</p>";
-      document.getElementById("pagination").innerHTML = ""; // Clear pagination
-    }
-  } catch (error) {
-    console.error("Fetch error:", error);
-    resultsContainer.innerHTML = `<p>Unable to fetch films. Please try again later. Error: ${error.message}</p>`;
-    document.getElementById("pagination").innerHTML = ""; // Clear pagination
-  }
 }
 
-async function fetchGenres() {
-  const apiKey = "YOUR_API_KEY";
-  const url = `https://api.themoviedb.org/3/genre/movie/list?api_key=${apiKey}&language=en-US`;
-  try {
-    const response = await fetch(url);
-    const data = await response.json();
-    return data.genres || [];
-  } catch (error) {
-    console.error("Error fetching genres:", error);
-    return [];
-  }
-}
-
-// Function to render film cards
+// Function to render films
 function renderFilms(films) {
   const resultsContainer = document.getElementById("results");
-  resultsContainer.innerHTML = "";
+  resultsContainer.innerHTML = ""; // Clear previous results
 
-  films.slice(0, 15).forEach((film) => {
-    const filmCard = document.createElement("div");
-    filmCard.className = "film";
+  films.forEach((film) => {
+      const filmCard = document.createElement("div");
+      filmCard.className = "film";
 
-    const img = document.createElement("img");
-    img.src = `https://image.tmdb.org/t/p/w500${film.poster_path}`;
-    img.alt = film.title;
-    filmCard.appendChild(img);
+      // Film Poster
+      const img = document.createElement("img");
+      img.src = film.poster_path
+          ? `https://image.tmdb.org/t/p/w500${film.poster_path}`
+          : "https://via.placeholder.com/500x750?text=No+Image";
+      img.alt = film.title || "Film Poster";
+      filmCard.appendChild(img);
 
-    const details = document.createElement("div");
-    details.className = "film-details";
+      // Film Title
+      const title = document.createElement("h2");
+      title.textContent = film.title || "Untitled";
+      filmCard.appendChild(title);
 
-    const title = document.createElement("h2");
-    title.textContent = film.title;
-    details.appendChild(title);
+      // Buttons Container
+      const buttonsContainer = document.createElement("div");
+      buttonsContainer.className = "film-buttons";
 
-    const overview = document.createElement("p");
-    overview.className = "overview";
-    overview.textContent = film.overview;
-    details.appendChild(overview);
+      // View Details Button
+      const detailsButton = document.createElement("button");
+      detailsButton.textContent = "View Details";
+      detailsButton.className = "view-details-btn";
+      detailsButton.onclick = () => showFilmDetails(film.id);
+      buttonsContainer.appendChild(detailsButton);
 
-    // Create buttons container
-    const buttonsContainer = document.createElement("div");
-    buttonsContainer.className = "film-buttons";
+      // Add to Favorite Button
+      const favoriteButton = document.createElement("button");
+      favoriteButton.textContent = "Add to Favorite";
+      favoriteButton.className = "add-to-favorite-btn";
+      favoriteButton.onclick = () => addToFavorites(film); // Save film to favorites
+      buttonsContainer.appendChild(favoriteButton);
 
-    // View Details Button
-    const viewButton = document.createElement("button");
-    viewButton.className = "view-details-btn";
-    viewButton.textContent = "View Details";
-    viewButton.onclick = () => showFilmDetails(film.id);
-    buttonsContainer.appendChild(viewButton);
+      // Append Buttons Container to Film Card
+      filmCard.appendChild(buttonsContainer);
 
-    // Add to Favorites Button
-    const favoriteButton = document.createElement("button");
-    favoriteButton.className = "favorite-btn";
-    favoriteButton.innerHTML = "&#10084";
-    favoriteButton.onclick = () => addToFavorites(film); // Pass the full film object
-    buttonsContainer.appendChild(favoriteButton);
+      // Append Film Card to Results
+      resultsContainer.appendChild(filmCard);
 
-    details.appendChild(buttonsContainer);
-    filmCard.appendChild(details);
-    resultsContainer.appendChild(filmCard);
   });
 }
 
-// Function to render pagination buttons
-// Function to render pagination buttons with dynamic range
+// Function to render pagination
 function renderPagination(currentPage, totalPages) {
-  const paginationContainer = document.getElementById("pagination");
-  paginationContainer.innerHTML = ""; // Clear previous buttons
+    const paginationContainer = document.getElementById("pagination");
+    paginationContainer.innerHTML = "";
 
-  const maxVisiblePages = 5; // Maximum number of pages to display
-  const startPage = Math.floor((currentPage - 1) / maxVisiblePages) * maxVisiblePages + 1;
-  const endPage = Math.min(startPage + maxVisiblePages - 1, totalPages);
+    // Create previous button
+    if (currentPage > 1) {
+        const prevButton = document.createElement("button");
+        prevButton.textContent = "Previous";
+        prevButton.onclick = () => searchFilm(currentPage - 1);
+        paginationContainer.appendChild(prevButton);
+    }
 
-  // Create "Previous" button
-  const prevButton = document.createElement("button");
-  prevButton.textContent = "Previous";
-  prevButton.disabled = currentPage === 1; // Disable if on the first page
-  prevButton.onclick = () => searchFilm(currentPage - 1);
-  paginationContainer.appendChild(prevButton);
-
-  // Create page number buttons
-  for (let i = startPage; i <= endPage; i++) {
-    const pageButton = document.createElement("button");
-    pageButton.textContent = i;
-    pageButton.className = i === currentPage ? "active" : ""; // Highlight the current page
-    pageButton.onclick = () => searchFilm(i);
-    paginationContainer.appendChild(pageButton);
-  }
-
-  // Create "Next" button
-  const nextButton = document.createElement("button");
-  nextButton.textContent = "Next";
-  nextButton.disabled = currentPage === totalPages; // Disable if on the last page
-  nextButton.onclick = () => searchFilm(currentPage + 1);
-  paginationContainer.appendChild(nextButton);
+    // Create next button
+    if (currentPage < totalPages) {
+        const nextButton = document.createElement("button");
+        nextButton.textContent = "Next";
+        nextButton.onclick = () => searchFilm(currentPage + 1);
+        paginationContainer.appendChild(nextButton);
+    }
 }
 
-// Function to show film details in a modal
+// Function to show film details
 async function showFilmDetails(filmId) {
-  const modalContainer = document.getElementById("modalContainer");
-  modalContainer.style.display = "block";
+    const modalContainer = document.getElementById("modalContainer");
+    modalContainer.style.display = "block"; // Show the modal
 
-  const apiKey = "36b0465246018e127b54bfa7d47d965c";
-  const response = await fetch(
-    `https://api.themoviedb.org/3/movie/${filmId}?api_key=${apiKey}&append_to_response=credits,videos`
-  );
-  const film = await response.json();
+    try {
+        const data = await fetchFromAPI(`movie/${filmId}`, {
+            append_to_response: "credits,videos",
+        });
 
-  const cast = film.credits.cast
-    .slice(0, 5)
-    .map((actor) => actor.name)
-    .join(", ");
-  const genres = film.genres.map((genre) => genre.name).join(", ");
+        // Get film details
+        const { title, overview, release_date, genres, credits, videos, poster_path } = data;
 
-  const trailerContent =
-    film.videos.results.length > 0
-      ? `<iframe src="https://www.youtube.com/embed/${film.videos.results[0].key}" frameborder="0" allowfullscreen></iframe>`
-      : "<p>There is no available trailer for this film.</p>";
+        const cast = credits.cast.slice(0, 5).map((actor) => actor.name).join(", ");
+        const genreList = genres.map((genre) => genre.name).join(", ");
+        const trailer = videos.results.find((video) => video.type === "Trailer");
 
-  const modalContent = `
-  <div class="modal">
-    <div class="modal-header">
-        <h2>${film.title}</h2>
-        <span class="close-button" onclick="closeModal()">&times;</span>
-    </div>
-    <div class="modal-content">
-        <img src="https://image.tmdb.org/t/p/w300${film.poster_path}" alt="${film.title}" />
-        <div class="modal-info">
-            <p><strong>Overview:</strong> ${film.overview}</p>
-            <p><strong>Release Date:</strong> ${film.release_date}</p>
-            <p><strong>Genres:</strong> ${genres}</p>
-            <p><strong>Cast:</strong> ${cast}</p>
-        </div>
-    </div>
-    ${trailerContent}
-  </div>`;
+        // Modal Content
+        const modalContent = `
+            <div class="modal">
+                <div class="modal-header">
+                    <h2>${title}</h2>
+                    <span class="close-button" onclick="closeModal()">&times;</span>
+                </div>
+                <div class="modal-content">
+                    <img src="${
+                        poster_path
+                            ? `https://image.tmdb.org/t/p/w500${poster_path}`
+                            : "https://via.placeholder.com/500x750?text=No+Image"
+                    }" alt="${title}" />
+                    <div class="modal-info">
+                        <p><strong>Overview:</strong> ${overview || "No overview available."}</p>
+                        <p><strong>Release Date:</strong> ${release_date || "Unknown"}</p>
+                        <p><strong>Genres:</strong> ${genreList || "N/A"}</p>
+                        <p><strong>Cast:</strong> ${cast || "N/A"}</p>
+                    </div>
+                </div>
+                ${
+                    trailer
+                        ? `<iframe src="https://www.youtube.com/embed/${trailer.key}" frameborder="0" allowfullscreen></iframe>`
+                        : "<p>No trailer available.</p>"
+                }
+            </div>
+        `;
 
-  modalContainer.innerHTML = modalContent;
+        modalContainer.innerHTML = modalContent;
+    } catch (error) {
+        console.error("Error fetching film details:", error);
+        modalContainer.innerHTML = `<p>Unable to fetch film details. Please try again later.</p>`;
+    }
 }
 
-// Function to close the modal
+// Close modal function
 function closeModal() {
-  document.getElementById("modalContainer").style.display = "none";
+    const modalContainer = document.getElementById("modalContainer");
+    modalContainer.style.display = "none";
+    modalContainer.innerHTML = ""; // Clear content
 }
 
-// Function to add film to favorites
-let favoriteFilms = []; // Array to store favorite films
+// Close Modal on Outside Click
+document.getElementById("favoritesModal").addEventListener("click", (event) => {
+    const modalContent = document.querySelector(".favorites-modal-content");
+    if (event.target === modalContent || modalContent.contains(event.target)) {
+        return; // Ignore clicks inside the modal content
+    }
+    closeFavoritesModal(); // Close the modal on outside click
+});
 
-// Function to handle adding films to favorites
+// Display Favorites Modal
+function displayFavorites() {
+    const favoritesModal = document.getElementById("favoritesModal");
+    const favoritesModalContent = document.getElementById("favoritesModalContent");
+    favoritesModalContent.innerHTML = ""; // Clear previous content
+
+    const favoriteFilms = JSON.parse(localStorage.getItem("favorites")) || [];
+
+    if (favoriteFilms.length === 0) {
+        favoritesModalContent.innerHTML = "<p>No favorite films added yet.</p>";
+    } else {
+        favoriteFilms.forEach((film) => {
+            const favoriteItem = document.createElement("div");
+            favoriteItem.className = "favorite-item";
+
+            const title = document.createElement("span");
+            title.textContent = film.title;
+            favoriteItem.appendChild(title);
+
+            // Add a "Remove" button
+            const removeButton = document.createElement("button");
+            removeButton.textContent = "Remove";
+            removeButton.className = "remove-favorite-btn";
+            removeButton.onclick = () => {
+                removeFavorite(film.id);
+                displayFavorites(); // Refresh the list
+            };
+            favoriteItem.appendChild(removeButton);
+
+            favoritesModalContent.appendChild(favoriteItem);
+        });
+    }
+
+    favoritesModal.style.display = "block"; // Show the modal
+}
+
+function closeFavoritesModal() {
+    const favoritesModal = document.getElementById("favoritesModal");
+    favoritesModal.style.display = "none"; // Hide the modal
+}
+
 function addToFavorites(film) {
-  const filmData = {
-    id: film.id,
-    title: film.title,
-  };
+    const favoriteFilms = JSON.parse(localStorage.getItem("favorites")) || [];
 
-  if (!favoriteFilms.some((f) => f.id === film.id)) {
-    favoriteFilms.push(filmData);
+    // Check if the film is already in favorites
+    if (favoriteFilms.some((f) => f.id === film.id)) {
+        alert(`${film.title} is already in your favorites!`);
+        return;
+    }
+
+    // Add film to favorites
+    favoriteFilms.push({
+        id: film.id,
+        title: film.title,
+        poster_path: film.poster_path,
+    });
+
+    // Save updated favorites to localStorage
+    localStorage.setItem("favorites", JSON.stringify(favoriteFilms));
+    alert(`${film.title} has been added to your favorites!`);
+}
+
+function removeFavorite(filmId) {
+    let favoriteFilms = JSON.parse(localStorage.getItem("favorites")) || [];
+    favoriteFilms = favoriteFilms.filter((film) => film.id !== filmId);
+
+    // Update localStorage with the new list
     localStorage.setItem("favorites", JSON.stringify(favoriteFilms));
 
-  } else {
-    alert(`${film.title} is already in your favorites!`);
-  }
-}
-// Function to display favorites in a modal
-function toggleFavoritesModal() {
-  const modalContainer = document.getElementById("favoritesModal");
-  modalContainer.style.display = "block";
+    // Refresh the favorites list
+    displayFavorites();
 
-  const favorites = JSON.parse(localStorage.getItem("favorites")) || [];
-  const favoritesContent = document.getElementById("favoritesModalContent");
-
-  if (favorites.length === 0) {
-    favoritesContent.innerHTML = "<p>No favorite films added yet.</p>";
-  } else {
-    favoritesContent.innerHTML = `
-      <h3>Here are your favorite films:</h3>
-      ${favorites
-        .map(
-          (film) => `
-          <div class="favorite-item">
-            <span>${film.title}</span>
-            <button class="remove-favorite-btn" onclick="removeFavorite(${film.id})">Remove</button>
-          </div>
-        `
-        )
-        .join("")}
-    `;
-  }
+    alert("Film removed from favorites!");
 }
 
-// Close modal on clicking outside
-window.onclick = function (event) {
-  const modalContainer = document.getElementById("favoritesModal");
-  if (event.target === modalContainer) {
-    modalContainer.style.display = "none";
-  }
-};
-
-// Function to remove a film from favorites
-function removeFavorite(filmId) {
-  favoriteFilms = favoriteFilms.filter((film) => film.id !== filmId);
-  localStorage.setItem("favorites", JSON.stringify(favoriteFilms));
-  toggleFavoritesModal(); // Refresh the modal content
-}
-
-// Event listener for the favorites toggle button
-const favoritesToggle = document.getElementById("favoritesToggle");
-favoritesToggle.addEventListener("click", toggleFavoritesModal);
-
-// Initialize the form
+// Initialize the application
 document.addEventListener("DOMContentLoaded", () => {
-  createForm();
+    createForm();
+    document.getElementById("favoritesToggle").addEventListener("click", displayFavorites);
+});
+
+document.getElementById("modalContainer").addEventListener("click", (event) => {
+    const modalContent = document.querySelector(".modal-content");
+    if (!modalContent.contains(event.target)) {
+        closeModal(); // Close the film detail modal
+    }
 });
