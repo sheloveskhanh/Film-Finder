@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Film Finder</title>
     <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/error.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
 </head>
 
@@ -18,15 +19,37 @@
                 &#x2764; Favorites
             </button>
         </div>
+        <div id="favoritesModal" class="modal-container" style="display: none;">
+            <div class="favorites-modal-content">
+                <div class="favorites-modal-content">
+                    <div class="modal-header">
+                        <h2>Your Favorites</h2>
+                        <span class="close-button" onclick="closeFavoritesModal()">&times;</span>
+                    </div>
+                <div id="favoritesModalContent"></div>
+                <div id="errorContainer" style="display: none;"></div>
+            </div>
+        </div>
+        
+        
     </header>
     <main>
+        <!-- Dynamic Form -->
         <div id="formContainer"></div>
+        
+        <!-- Search Results -->
         <div class="results" id="results"></div>
-        <div id="modalContainer"></div>
+        
+        <!-- Modal for Film Details -->
+        <div id="modalContainer" class="modal-container" style="display: none;"></div>
+
+        <!-- Modal for Favorites -->
         <div id="favoritesModal" class="modal-container">
             <div class="favorites-modal-content" id="favoritesModalContent"></div>
         </div>
-        <div id="pagination" class="pagination-container"></div> 
+
+        <!-- Pagination -->
+        <div id="pagination" class="pagination-container"></div>
     </main>
     <footer>
         &copy; 2024 Film Finder. All rights reserved.
